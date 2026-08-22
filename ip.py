@@ -1,7 +1,14 @@
 from pathlib import Path
 
 from langchain_docling.loader import DoclingLoader, ExportType
-
+import os 
+from langchain_community.document_loaders import TextLoader, DirectoryLoader 
+from langchain_text_splitters import CharacterTextSplitter 
+from langchain_openai import OpenAIEmbeddings 
+from langchain_chroma import Chroma 
+from dotenv import load_dotenv 
+from langchain_huggingface import HuggingFaceEmbeddings 
+ 
 
 # def load_documents(docs_path="docs"):
 #     """
@@ -114,51 +121,117 @@ from langchain_docling.loader import DoclingLoader, ExportType
 
 #     return documents
 
+def create_vector_store(chunks, persist_directory="db/chroma_db"): 
+    """Create and persist ChromaDB vector store""" 
+    print("Creating embeddings and storing in ChromaDB...") 
+         
+    embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2") 
+ 
+    # Create ChromaDB vector store 
+    print("--- Creating vector store ---") 
+ 
+    vectorstore = Chroma.from_documents( 
+        documents=chunks, 
+        embedding=embedding_model, 
+        persist_directory=persist_directory,  
+        collection_metadata={"hnsw:space": "cosine"} 
+    ) 
+    print("--- Finished creating vector store ---") 
+     
+    print(f"Vector store created and saved to {persist_directory}") 
+    return vectorstore 
 
 
-directory = Path("docs")
-file_paths = [
-    str(p) for ext in ("*.pdf", "*.pptx", "*.txt") for p in directory.glob(ext)
-]
+def split_documents(documents, chunk_size=1000, chunk_overlap=0): 
+    """Split documents into smaller chunks with overlap""" 
+    print("Splitting documents into chunks...") 
+     
+    text_splitter = CharacterTextSplitter( 
+        chunk_size=chunk_size,  
+        chunk_overlap=chunk_overlap 
+    ) 
+     
+    chunks = text_splitter.split_documents(documents) 
+     
+     
+    return chunks 
 
-loader = DoclingLoader(file_path=file_paths,export_type= ExportType.MARKDOWN)
-documents = loader.load()
-print(f"number of docs {len(documents)}")
+def load_documents():
 
-for i, doc in enumerate(documents[:3]):
+    directory = Path("docs")
+    file_paths = [
+        str(p) for ext in ("*.pdf", "*.pptx", "*.txt") for p in directory.glob(ext)
+    ]
 
-        print(f"\n========== Document {i + 1} ==========")
+    loader = DoclingLoader(file_path=file_paths,export_type= ExportType.MARKDOWN)
+    documents = loader.load()
+    print(f"number of docs {len(documents)}")
 
-        print(
-            "Source:",
-            doc.metadata.get("source")
-        )
+    for i, doc in enumerate(documents[:3]):
 
-        print(
-            "Content length:",
-            len(doc.page_content)
-        )
+            print(f"\n========== Document {i + 1} ==========")
 
-        print(
-            "Content preview:",
-            doc.page_content[:500]
-        )
+            print(
+                "Source:",
+                doc.metadata.get("source")
+            )
 
-        print( "Metadata:")
-        print(f"len = {len(doc.metadata)}")
-        for k,v in list(doc.metadata.items())[:5]:
-            print(k,v)
+            print(
+                "Content length:",
+                len(doc.page_content)
+            )
 
+            print(
+                "Content preview:",
+                doc.page_content[:500]
+            )
 
+            print( "Metadata:")
+            print(f"len = {len(doc.metadata)}")
+            for k,v in list(doc.metadata.items())[:5]:
+                print(k,v)
 
-# def main():
-
-#     print("Starting Docling ingestion...\n")
-
-#     documents = load_documents("docs")
-
-#     print("\nIngestion completed successfully.")
+    return documents
 
 
-# if __name__ == "__main__":
-#     main()
+def main(): 
+    """Main ingestion pipeline""" 
+    print("=== RAG Document Ingestion Pipeline ===\n") 
+     
+    # Define paths 
+    docs_path = "docs" 
+    persistent_directory = "db/chroma_db" 
+     
+    # Check if vector store already exists 
+    if os.path.exists(persistent_directory): 
+        print("✅ Vector store already exists. No need to re-process documents.") 
+         
+        embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+        vectorstore = Chroma( 
+            persist_directory=persistent_directory, 
+            embedding_function=embedding_model,  
+            collection_metadata={"hnsw:space": "cosine"} 
+        ) 
+        
+        print(f"Loaded existing vector store with {vectorstore._collection.count()} documents") 
+        return vectorstore 
+ 
+     
+    print("Persistent directory does not exist. Initializing vector store...\n") 
+     
+    # Step 1: Load documents 
+    documents = load_documents(docs_path)   
+ 
+    # Step 2: Split into chunks 
+    chunks = split_documents(documents) 
+     
+    # # Step 3: Create vector store 
+    vectorstore = create_vector_store(chunks, persistent_directory) 
+     
+    print("\n✅ Ingestion complete! Your documents are now ready for RAG queries.") 
+    return vectorstore 
+ 
+ 
+if __name__ == "__main__": 
+    main()
