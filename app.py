@@ -1,6 +1,6 @@
-__import__("pysqlite3")
-import sys
-sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+# __import__("pysqlite3")
+# import sys
+# sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 
 
 import os
@@ -20,6 +20,9 @@ load_dotenv()
 PERSIST_DIR = "db/chroma_db"
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 LLM_MODEL = "openai/gpt-oss-120b"
+
+# Ingestion buttons only appear when this is explicitly enabled (local dev)
+# ALLOW_INGEST = os.getenv("ALLOW_INGEST", "false").lower() == "true"
 
 st.set_page_config(page_title="RAG Chat", page_icon="📚", layout="centered")
 
